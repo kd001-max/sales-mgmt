@@ -155,18 +155,35 @@ class BitableService {
 
   /**
    * 格式化字段数据（处理数组、日期等类型）
+   * 飞书API要求：日期必须传Unix时间戳（毫秒）
    */
   formatFields(fields) {
     const formatted = {};
     for (const [key, value] of Object.entries(fields)) {
       if (value === null || value === undefined) continue;
+
+      // Date 对象 → 时间戳
       if (value instanceof Date) {
         formatted[key] = value.getTime();
-      } else if (typeof value === 'object' && !Array.isArray(value)) {
-        formatted[key] = JSON.stringify(value);
-      } else {
-        formatted[key] = value;
+        continue;
       }
+
+      // 日期字符串 '2026-06-16' 或 '2026-06-16T...' → 时间戳
+      if (typeof value === 'string' && /^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/.test(value)) {
+        const ts = new Date(value).getTime();
+        if (!isNaN(ts)) {
+          formatted[key] = ts;
+          continue;
+        }
+      }
+
+      // 对象（非数组）→ JSON字符串
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        formatted[key] = JSON.stringify(value);
+        continue;
+      }
+
+      formatted[key] = value;
     }
     return formatted;
   }
