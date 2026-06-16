@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>生产计划子系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <a href="/" class="back-btn">← 返回</a>
+    <h1>⚙️ 生产计划</h1>
+    <span id="userName" style="font-size:12px;opacity:0.9;"></span>
+  </header>
+
+  <div class="page-content">
+    <div class="notice-banner">
+      📌 工单编号规则: MO+年月(4位)+流水号(4位) | 每日计划需提前3天发放
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value" id="moTotal">-</div><div class="stat-label">总工单数</div></div>
+      <div class="stat-card stat-warning"><div class="stat-value" id="moPending">-</div><div class="stat-label">待排程</div></div>
+      <div class="stat-card stat-success"><div class="stat-value" id="moDone">-</div><div class="stat-label">已结案</div></div>
+    </div>
+
+    <div class="filter-bar" id="moFilterBar">
+      <span class="filter-tag active" data-filter="">全部工单</span>
+      <span class="filter-tag" data-filter="待排程">待排程</span>
+      <span class="filter-tag" data-filter="已排程">已排程</span>
+      <span class="filter-tag" data-filter="生产中">生产中</span>
+      <span class="filter-tag" data-filter="已完成">已完成</span>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm" onclick="showGenerateModal()">+ 生成工单</button>
+      <button class="btn btn-warning btn-sm" onclick="showPlanModal()">📅 排程</button>
+      <button class="btn btn-success btn-sm" onclick="showDailyPlanModal()">📋 日计划</button>
+    </div>
+
+    <div id="moList" class="card-list">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <!-- 生成工单弹窗 -->
+  <div class="modal-overlay" id="generateModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>生成生产工单</h3>
+        <button class="modal-close" onclick="closeModal('generateModal')">×</button>
+      </div>
+      <form onsubmit="generateMO(event)">
+        <div class="form-group"><label>销售订单号</label><input type="text" id="moSalesOrderNo" required></div>
+        <div class="form-row">
+          <div class="form-group"><label>产品编码</label><input type="text" id="moProductCode" required></div>
+          <div class="form-group"><label>产品名称</label><input type="text" id="moProductName" required></div>
+        </div>
+        <div class="form-group"><label>物料编码</label><input type="text" id="moMaterialCode"></div>
+        <div class="form-row">
+          <div class="form-group"><label>数量 (PCS) *</label><input type="number" id="moQty" required></div>
+          <div class="form-group"><label>生产部门</label>
+            <select id="moDept"><option>装配车间</option><option>注塑部</option><option>丝印部</option><option>SMT车间</option><option>包装车间</option></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>开工日期</label><input type="date" id="moStartDate"></div>
+          <div class="form-group"><label>完工日期</label><input type="date" id="moEndDate"></div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">生成工单</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 排程弹窗 -->
+  <div class="modal-overlay" id="scheduleModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>生产排程</h3>
+        <button class="modal-close" onclick="closeModal('scheduleModal')">×</button>
+      </div>
+      <form onsubmit="createSchedule(event)">
+        <div class="form-group"><label>工单编号</label><input type="text" id="schMoNo" required></div>
+        <div class="form-group"><label>工序名称</label>
+          <select id="schProcess"><option>注塑</option><option>丝印</option><option>贴片</option><option>装配</option><option>测试</option><option>包装</option></select>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>计划日期</label><input type="date" id="schDate"></div>
+          <div class="form-group"><label>计划数量</label><input type="number" id="schQty"></div>
+        </div>
+        <div class="form-group"><label>标准产能/天</label><input type="number" id="schCapacity"></div>
+        <button type="submit" class="btn btn-primary btn-block">创建排程</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 日计划弹窗 -->
+  <div class="modal-overlay" id="dailyPlanModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>创建每日生产计划</h3>
+        <button class="modal-close" onclick="closeModal('dailyPlanModal')">×</button>
+      </div>
+      <form onsubmit="createDailyPlan(event)">
+        <div class="form-row">
+          <div class="form-group"><label>生产日期</label><input type="date" id="dpDate" required></div>
+          <div class="form-group"><label>生产车间</label>
+            <select id="dpWorkshop"><option>装配车间</option><option>注塑部</option><option>丝印部</option><option>SMT车间</option><option>包装车间</option><option>成品组装车间</option></select>
+          </div>
+        </div>
+        <div class="form-group"><label>工单编号</label><input type="text" id="dpMoNo" required></div>
+        <div class="form-row">
+          <div class="form-group"><label>产品编码</label><input type="text" id="dpProductCode"></div>
+          <div class="form-group"><label>产品名称</label><input type="text" id="dpProductName"></div>
+        </div>
+        <div class="form-group"><label>计划数量</label><input type="number" id="dpQty" required></div>
+        <div class="form-group"><label>备注</label><textarea id="dpRemark" placeholder="如欠料到料时间等"></textarea></div>
+        <button type="submit" class="btn btn-primary btn-block">创建日计划</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 工单操作弹窗 -->
+  <div class="modal-overlay" id="moActionModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>工单操作</h3>
+        <button class="modal-close" onclick="closeModal('moActionModal')">×</button>
+      </div>
+      <div id="moActionBody"></div>
+    </div>
+  </div>
+
+  <nav class="app-tabs">
+    <a href="/"><span class="tab-icon">🏠</span>首页</a>
+    <a href="/sales-order"><span class="tab-icon">📋</span>订货</a>
+    <a href="/production-plan" class="active"><span class="tab-icon">⚙️</span>生产</a>
+    <a href="/material-control"><span class="tab-icon">📦</span>物料</a>
+    <a href="/sales-shipment"><span class="tab-icon">🚚</span>发货</a>
+  </nav>
+
+  <script src="/js/api.js"></script>
+  <script>
+    let currentMoFilter = '';
+    let currentMoId = '';
+
+    document.getElementById('moFilterBar').addEventListener('click', (e) => {
+      const tag = e.target.closest('.filter-tag');
+      if (!tag) return;
+      document.querySelectorAll('#moFilterBar .filter-tag').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      currentMoFilter = tag.dataset.filter;
+      loadMOs();
+    });
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
+    }
+
+    // 加载工单
+    async function loadMOs() {
+      const container = document.getElementById('moList');
+      container.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const resp = await API.productionPlan.listOrders({ status: currentMoFilter || undefined });
+        const items = resp.data?.items || [];
+
+        // 更新统计
+        if (resp.data?.total !== undefined) {
+          document.getElementById('moTotal').textContent = items.length;
+        }
+
+        if (items.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">⚙️</div><div class="empty-text">暂无工单，请先生成</div></div>';
+          return;
+        }
+
+        let pending = 0, done = 0;
+        container.innerHTML = items.map(item => {
+          const f = item.fields || {};
+          const id = item.record_id;
+          const status = f['工单状态'] || '待排程';
+          if (status === '待排程') pending++;
+          if (status === '已完成' || status === '已结案') done++;
+          return `<div class="card-item" onclick="showMOActions('${id}')">
+            <div class="card-title">${f['工单编号']||'-'} <span class="card-status ${getStatusClass(status)}">${status}</span></div>
+            <div class="card-meta">
+              <span>📦 ${f['产品名称']||'-'}</span>
+              <span>📊 ${f['工单数量']||0}PCS</span>
+              <span>🏭 ${f['生产部门']||'-'}</span>
+              <span>📅 ${f['开工日期']||'-'} ~ ${f['完工日期']||'-'}</span>
+            </div>
+          </div>`;
+        }).join('');
+        document.getElementById('moPending').textContent = pending;
+        document.getElementById('moDone').textContent = done;
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-text">加载失败: ${err.message}</div></div>`;
+      }
+    }
+
+    // 工单操作
+    function showMOActions(recordId) {
+      currentMoId = recordId;
+      const modal = document.getElementById('moActionModal');
+      const body = document.getElementById('moActionBody');
+      modal.classList.add('show');
+
+      API.productionPlan.listOrders({ pageSize: 500 }).then(resp => {
+        const item = resp.data?.items?.find(i => i.record_id === recordId);
+        if (!item) { body.innerHTML = '<p>未找到工单</p>'; return; }
+        const f = item.fields || {};
+        const status = f['工单状态'] || '待排程';
+        body.innerHTML = `
+          <p style="margin-bottom:8px;"><strong>工单：</strong>${f['工单编号']||'-'}</p>
+          <p style="margin-bottom:8px;"><strong>产品：</strong>${f['产品名称']||'-'}</p>
+          <p style="margin-bottom:8px;"><strong>数量：</strong>${f['工单数量']||0}PCS</p>
+          <p style="margin-bottom:12px;"><strong>部门：</strong>${f['生产部门']||'-'}</p>
+          <div class="form-group"><label>更新状态</label>
+            <select id="moNewStatus">
+              <option value="待排程" ${status==='待排程'?'selected':''}>待排程</option>
+              <option value="已排程" ${status==='已排程'?'selected':''}>已排程</option>
+              <option value="生产中" ${status==='生产中'?'selected':''}>生产中</option>
+              <option value="已完成" ${status==='已完成'?'selected':''}>已完成</option>
+              <option value="已结案" ${status==='已结案'?'selected':''}>已结案</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>入库数量</label><input type="number" id="moCompletedQty" value="${f['入库数量']||0}"></div>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="updateMOStatus()">更新状态</button>
+        `;
+      }).catch(err => {
+        body.innerHTML = `<p style="color:var(--danger);">${err.message}</p>`;
+      });
+    }
+
+    async function updateMOStatus() {
+      const status = document.getElementById('moNewStatus').value;
+      const qty = parseInt(document.getElementById('moCompletedQty').value) || 0;
+      try {
+        await API.productionPlan.updateOrderStatus({
+          recordId: currentMoId,
+          status,
+          completedQty: qty,
+        });
+        showToast('工单状态已更新', 'success');
+        closeModal('moActionModal');
+        loadMOs();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    // 生成工单
+    function showGenerateModal() { document.getElementById('generateModal').classList.add('show'); }
+    async function generateMO(e) {
+      e.preventDefault();
+      try {
+        await API.productionPlan.generateOrder({
+          salesOrderNo: document.getElementById('moSalesOrderNo').value,
+          productCode: document.getElementById('moProductCode').value,
+          productName: document.getElementById('moProductName').value,
+          materialCode: document.getElementById('moMaterialCode').value,
+          qty: parseInt(document.getElementById('moQty').value),
+          dept: document.getElementById('moDept').value,
+          startDate: document.getElementById('moStartDate').value,
+          endDate: document.getElementById('moEndDate').value,
+        });
+        showToast('工单生成成功', 'success');
+        closeModal('generateModal');
+        loadMOs();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function showPlanModal() { document.getElementById('scheduleModal').classList.add('show'); }
+    async function createSchedule(e) {
+      e.preventDefault();
+      try {
+        await API.productionPlan.createSchedule({
+          moNo: document.getElementById('schMoNo').value,
+          processName: document.getElementById('schProcess').value,
+          planDate: document.getElementById('schDate').value,
+          planQty: parseInt(document.getElementById('schQty').value),
+          dailyCapacity: parseInt(document.getElementById('schCapacity').value) || 0,
+        });
+        showToast('排程创建成功', 'success');
+        closeModal('scheduleModal');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function showDailyPlanModal() { document.getElementById('dailyPlanModal').classList.add('show'); }
+    async function createDailyPlan(e) {
+      e.preventDefault();
+      try {
+        await API.productionPlan.createDailyPlan({
+          planDate: document.getElementById('dpDate').value,
+          moNo: document.getElementById('dpMoNo').value,
+          productCode: document.getElementById('dpProductCode').value,
+          productName: document.getElementById('dpProductName').value,
+          qty: parseInt(document.getElementById('dpQty').value),
+          workshop: document.getElementById('dpWorkshop').value,
+          remark: document.getElementById('dpRemark').value,
+        });
+        showToast('每日计划已创建', 'success');
+        closeModal('dailyPlanModal');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function initPage() {
+      const user = await initAuth();
+      const nameEl = document.getElementById('userName');
+      if (nameEl && user) nameEl.textContent = user.department ? `${user.name}(${user.department})` : user.name;
+      loadMOs();
+    }
+    initPage();
+  </script>
+</body>

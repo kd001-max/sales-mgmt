@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>物料管控子系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <a href="/" class="back-btn">← 返回</a>
+    <h1>📦 物料管控</h1>
+    <span id="userName" style="font-size:12px;opacity:0.9;"></span>
+  </header>
+
+  <div class="page-content">
+    <div class="stats-grid" id="materialStats">
+      <div class="stat-card"><div class="stat-value" id="matTotal">-</div><div class="stat-label">物料总数</div></div>
+      <div class="stat-card stat-danger"><div class="stat-value" id="matLow">-</div><div class="stat-label">欠料预警</div></div>
+      <div class="stat-card stat-success"><div class="stat-value" id="matA">-</div><div class="stat-label">A类物料</div></div>
+    </div>
+
+    <div class="notice-banner">
+      📌 退料编号规则: 小组代码-年月(6位)+流水号(4位) | 制程退料超5%需经理批准
+    </div>
+
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="搜索物料编码/名称..." id="matSearch" oninput="loadMaterials()">
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm" onclick="showIssueModal()">📤 发料</button>
+      <button class="btn btn-warning btn-sm" onclick="showReturnModal()">↩️ 退料</button>
+      <button class="btn btn-success btn-sm" onclick="showSupplementModal()">📥 补料</button>
+    </div>
+
+    <h3 style="font-size:15px;margin-bottom:8px;">📋 物料列表</h3>
+    <div id="materialList" class="card-list">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <!-- 发料弹窗 -->
+  <div class="modal-overlay" id="issueModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>📤 生产发料</h3>
+        <button class="modal-close" onclick="closeModal('issueModal')">×</button>
+      </div>
+      <form onsubmit="createIssue(event)">
+        <div class="form-group"><label>工单编号</label><input type="text" id="issueMoNo" required></div>
+        <div class="form-row">
+          <div class="form-group"><label>物料编码</label><input type="text" id="issueMatCode" required></div>
+          <div class="form-group"><label>物料名称</label><input type="text" id="issueMatName"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>应发数量</label><input type="number" id="issueReqQty" required></div>
+          <div class="form-group"><label>发料类型</label>
+            <select id="issueType"><option>正常发料</option><option>按可用量发料</option></select>
+          </div>
+        </div>
+        <div class="form-group" id="availableQtyGroup" style="display:none;">
+          <label>可用数量</label><input type="number" id="issueAvailQty">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">创建发料单</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 退料弹窗 -->
+  <div class="modal-overlay" id="returnModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>↩️ 退料申请</h3>
+        <button class="modal-close" onclick="closeModal('returnModal')">×</button>
+      </div>
+      <form onsubmit="createReturnReq(event, '退料')">
+        <div class="form-row">
+          <div class="form-group"><label>申请部门</label>
+            <select id="returnDept"><option>装配车间</option><option>注塑部</option><option>丝印部</option><option>SMT车间</option></select>
+          </div>
+          <div class="form-group"><label>小组代码</label><input type="text" id="returnGroup" placeholder="如4A1"></div>
+        </div>
+        <div class="form-group"><label>收发类别</label>
+          <select id="returnCategory">
+            <option value="制程退料">制程退料</option>
+            <option value="来料不良退料">来料不良退料</option>
+            <option value="生产退料">生产退料（好料）</option>
+          </select>
+        </div>
+        <div class="form-group"><label>关联工单编号</label><input type="text" id="returnMoNo" required></div>
+        <div class="form-row">
+          <div class="form-group"><label>物料编码</label><input type="text" id="returnMatCode" required></div>
+          <div class="form-group"><label>退料数量</label><input type="number" id="returnQty" required></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>产品编码</label><input type="text" id="returnProduct"></div>
+          <div class="form-group"><label>订单数量</label><input type="number" id="returnOrderQty"></div>
+        </div>
+        <div class="form-group"><label>退料原因</label><textarea id="returnReason" required></textarea></div>
+        <button type="submit" class="btn btn-warning btn-block">提交退料申请</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 补料弹窗 -->
+  <div class="modal-overlay" id="supplementModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>📥 补料申请</h3>
+        <button class="modal-close" onclick="closeModal('supplementModal')">×</button>
+      </div>
+      <form onsubmit="createReturnReq(event, '补料')">
+        <div class="form-row">
+          <div class="form-group"><label>申请部门</label>
+            <select id="supDept"><option>装配车间</option><option>注塑部</option><option>丝印部</option><option>SMT车间</option></select>
+          </div>
+          <div class="form-group"><label>小组代码</label><input type="text" id="supGroup" placeholder="如4A1"></div>
+        </div>
+        <div class="form-group"><label>收发类别</label>
+          <select id="supCategory">
+            <option value="制程补料">制程补料</option>
+            <option value="来料不良补料">来料不良补料</option>
+            <option value="生产领料">生产领料</option>
+          </select>
+        </div>
+        <div class="form-group"><label>关联工单编号</label><input type="text" id="supMoNo" required></div>
+        <div class="form-row">
+          <div class="form-group"><label>物料编码</label><input type="text" id="supMatCode" required></div>
+          <div class="form-group"><label>补料数量</label><input type="number" id="supQty" required></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>产品编码</label><input type="text" id="supProduct"></div>
+          <div class="form-group"><label>订单数量</label><input type="number" id="supOrderQty"></div>
+        </div>
+        <div class="form-group"><label>补料原因</label><textarea id="supReason" required></textarea></div>
+        <button type="submit" class="btn btn-success btn-block">提交补料申请</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 发料类型切换 -->
+  <script>
+    document.getElementById('issueType')?.addEventListener('change', function() {
+      document.getElementById('availableQtyGroup').style.display =
+        this.value === '按可用量发料' ? 'block' : 'none';
+    });
+  </script>
+
+  <nav class="app-tabs">
+    <a href="/"><span class="tab-icon">🏠</span>首页</a>
+    <a href="/sales-order"><span class="tab-icon">📋</span>订货</a>
+    <a href="/production-plan"><span class="tab-icon">⚙️</span>生产</a>
+    <a href="/material-control" class="active"><span class="tab-icon">📦</span>物料</a>
+    <a href="/sales-shipment"><span class="tab-icon">🚚</span>发货</a>
+  </nav>
+
+  <script src="/js/api.js"></script>
+  <script>
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+    // 加载物料列表
+    async function loadMaterials() {
+      const container = document.getElementById('materialList');
+      container.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const resp = await API.materialControl.listMaterials();
+        const items = resp.data?.items || [];
+
+        // 统计
+        const stats = await API.materialControl.stockStatus();
+        if (stats.data) {
+          document.getElementById('matTotal').textContent = stats.data.total || 0;
+          document.getElementById('matLow').textContent = stats.data.lowStockCount || 0;
+          document.getElementById('matA').textContent = stats.data.aClass || 0;
+        }
+
+        if (items.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">暂无物料数据</div></div>';
+          return;
+        }
+
+        container.innerHTML = items.map(item => {
+          const f = item.fields || {};
+          const stock = f['库存数量'] || 0;
+          const safety = f['安全库存'] || 0;
+          const isLow = safety > 0 && stock <= safety;
+          return `<div class="card-item">
+            <div class="card-title">${f['物料编码']||'-'} ${isLow ? '🚨' : ''}</div>
+            <div class="card-meta">
+              <span>📦 ${f['物料名称']||'-'}</span>
+              <span>📊 库存: ${stock}</span>
+              <span class="card-status ${f['物料分类'] === 'A类' ? 'status-danger' : f['物料分类'] === 'B类' ? 'status-warning' : 'status-pending'}">${f['物料分类']||'C类'}</span>
+            </div>
+          </div>`;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-text">加载失败: ${err.message}</div></div>`;
+      }
+    }
+
+    function showIssueModal() { document.getElementById('issueModal').classList.add('show'); }
+    async function createIssue(e) {
+      e.preventDefault();
+      try {
+        const type = document.getElementById('issueType').value;
+        await API.materialControl.createIssue({
+          moNo: document.getElementById('issueMoNo').value,
+          materialCode: document.getElementById('issueMatCode').value,
+          materialName: document.getElementById('issueMatName').value,
+          requiredQty: parseInt(document.getElementById('issueReqQty').value),
+          issueType: type,
+          availableQty: type === '按可用量发料' ? parseInt(document.getElementById('issueAvailQty').value) : undefined,
+        });
+        showToast('发料单已创建', 'success');
+        closeModal('issueModal');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function showReturnModal() { document.getElementById('returnModal').classList.add('show'); }
+    function showSupplementModal() { document.getElementById('supplementModal').classList.add('show'); }
+
+    async function createReturnReq(e, docType) {
+      e.preventDefault();
+      const prefix = docType === '退料' ? 'return' : 'sup';
+      try {
+        await API.materialControl.createReturnReq({
+          docType,
+          transCategory: document.getElementById(`${prefix}Category`).value,
+          dept: document.getElementById(`${prefix}Dept`).value,
+          groupCode: document.getElementById(`${prefix}Group`).value,
+          moNo: document.getElementById(`${prefix}MoNo`).value,
+          productCode: document.getElementById(`${prefix}Product`).value,
+          productName: document.getElementById(`${prefix}Product`).value,
+          orderQty: parseInt(document.getElementById(`${prefix}OrderQty`).value) || 0,
+          materialCode: document.getElementById(`${prefix}MatCode`).value,
+          qty: parseInt(document.getElementById(`${prefix}Qty`).value),
+          reason: document.getElementById(`${prefix}Reason`).value,
+        });
+        showToast(`${docType}申请已提交`, 'success');
+        closeModal(`${prefix === 'return' ? 'returnModal' : 'supplementModal'}`);
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function initPage() {
+      const user = await initAuth();
+      const nameEl = document.getElementById('userName');
+      if (nameEl && user) nameEl.textContent = user.department ? `${user.name}(${user.department})` : user.name;
+      loadMaterials();
+    }
+    initPage();
+  </script>
+</body>

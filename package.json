@@ -1,0 +1,20 @@
+{
+  "name": "sales-production-mgmt",
+  "version": "1.0.0",
+  "description": "销售生产管理系统 - 飞书集成版",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "init-bitable": "node bitable/init.js"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.33.0",
+    "express": "^4.18.2",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.7"
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "schema_version": "1.0",
+  "app_name": "销售生产管理系统",
+  "app_description": "集成销售订货、生产计划、物料管控、销售发货四大核心业务流程的ERP管理系统",
+  "app_icon_url": "",
+  "capabilities": {
+    "web_app": {
+      "enabled": true,
+      "description": "销售生产管理Web应用，可在飞书内嵌打开",
+      "pages": [
+        {
+          "url": "https://【你的域名】/",
+          "title": "系统首页",
+          "mobile_url": "https://【你的域名】/",
+          "description": "销售生产管理系统仪表盘"
+        },
+        {
+          "url": "https://【你的域名】/sales-order",
+          "title": "销售订货",
+          "mobile_url": "https://【你的域名】/sales-order",
+          "description": "销售订单下达、评审、跟进"
+        },
+        {
+          "url": "https://【你的域名】/production-plan",
+          "title": "生产计划",
+          "mobile_url": "https://【你的域名】/production-plan",
+          "description": "生产工单、排程、日计划"
+        },
+        {
+          "url": "https://【你的域名】/material-control",
+          "title": "物料管控",
+          "mobile_url": "https://【你的域名】/material-control",
+          "description": "发料、退料、补料、入库"
+        },
+        {
+          "url": "https://【你的域名】/sales-shipment",
+          "title": "销售发货",
+          "mobile_url": "https://【你的域名】/sales-shipment",
+          "description": "发货单制作、审核、发货流程"
+        }
+      ]
+    },
+    "bot": {
+      "enabled": true,
+      "description": "用于发送系统通知和待办提醒",
+      "webhook_url": "https://【你的域名】/api/bot/webhook",
+      "event_types": [
+        "im.message.receive_v1"
+      ]
+    },
+    "approval": {
+      "enabled": true,
+      "approval_definitions": [
+        {
+          "code": "sales_order_review",
+          "name": "销售订单评审",
+          "description": "销售订单的工程评审和计划部交期评审流程",
+          "form_fields": [
+            {"id": "orderNo", "name": "订单编号", "type": "input"},
+            {"id": "customer", "name": "客户名称", "type": "input"},
+            {"id": "amount", "name": "订单金额", "type": "input"},
+            {"id": "deliveryDate", "name": "要求交期", "type": "date"},
+            {"id": "orderType", "name": "订单类型", "type": "select"}
+          ],
+          "approval_flow": [
+            {"node": "engineering_review", "name": "工程部BOM评审", "approver_type": "role", "role": "工程部"},
+            {"node": "planning_review", "name": "计划部交期评审", "approver_type": "role", "role": "计划部"},
+            {"node": "sales_confirm", "name": "业务部确认", "approver_type": "role", "role": "业务部"}
+          ]
+        },
+        {
+          "code": "order_change_notice",
+          "name": "订单变更通知",
+          "description": "销售订单变更申请及重新评审流程",
+          "form_fields": [
+            {"id": "changeNo", "name": "变更单号", "type": "input"},
+            {"id": "orderNo", "name": "关联订单", "type": "input"},
+            {"id": "changeType", "name": "变更类型", "type": "select"},
+            {"id": "reason", "name": "变更原因", "type": "textarea"}
+          ],
+          "approval_flow": [
+            {"node": "planning_re_review", "name": "计划部重新评审", "approver_type": "role", "role": "计划部"}
+          ]
+        },
+        {
+          "code": "material_return_approval",
+          "name": "退补料审批",
+          "description": "生产退料和补料的多级审批流程",
+          "form_fields": [
+            {"id": "docNo", "name": "单据编号", "type": "input"},
+            {"id": "docType", "name": "单据类型", "type": "select"},
+            {"id": "materialCode", "name": "物料编码", "type": "input"},
+            {"id": "quantity", "name": "数量", "type": "input"},
+            {"id": "ratio", "name": "比例", "type": "input"}
+          ],
+          "approval_flow": [
+            {"node": "leader_approve", "name": "组长审核", "approver_type": "role", "role": "生产组长"},
+            {"node": "supervisor_approve", "name": "主管复核", "approver_type": "role", "role": "车间主管"},
+            {"node": "quality_confirm", "name": "品质确认", "approver_type": "role", "role": "品质IPQC"},
+            {"node": "mc_approve", "name": "物控加签", "approver_type": "role", "role": "计划部物控"},
+            {"node": "manager_approve", "name": "经理审批", "approver_type": "role", "role": "生产经理"},
+            {"node": "vp_approve", "name": "副总审批", "approver_type": "role", "role": "分管副总"},
+            {"node": "ceo_approve", "name": "总经理审批", "approver_type": "role", "role": "总经理"}
+          ]
+        },
+        {
+          "code": "contact_note_approval",
+          "name": "联络单审批",
+          "description": "非订单类需求的联络单审批",
+          "form_fields": [
+            {"id": "noteNo", "name": "联络单号", "type": "input"},
+            {"id": "title", "name": "标题", "type": "input"},
+            {"id": "content", "name": "内容", "type": "textarea"},
+            {"id": "dept", "name": "发起部门", "type": "input"}
+          ],
+          "approval_flow": [
+            {"node": "dept_head_approve", "name": "部门负责人审批", "approver_type": "role", "role": "部门负责人"}
+          ]
+        }
+      ]
+    },
+    "bitable": {
+      "enabled": true,
+      "description": "使用飞书多维表格作为系统数据库",
+      "tables": [
+        {"name": "销售订单", "key": "sales_order"},
+        {"name": "产品BOM", "key": "product_bom"},
+        {"name": "物料主档", "key": "material"},
+        {"name": "生产工单", "key": "production_order"},
+        {"name": "生产排程", "key": "production_schedule"},
+        {"name": "每日生产计划", "key": "daily_plan"},
+        {"name": "周生产排程表", "key": "weekly_schedule"},
+        {"name": "生产发料单", "key": "material_issue"},
+        {"name": "退补料申请单", "key": "material_return_req"},
+        {"name": "销售发货单", "key": "sales_shipment"},
+        {"name": "预测需求计划", "key": "demand_forecast"},
+        {"name": "订单变更通知单", "key": "order_change_notice"},
+        {"name": "联络单", "key": "contact_note"},
+        {"name": "产品生产周期表", "key": "production_cycle"},
+        {"name": "KPI统计", "key": "kpi_statistics"},
+        {"name": "生产订单损耗统计表", "key": "waste_statistics"}
+      ]
+    },
+    "events": {
+      "enabled": true,
+      "event_types": [
+        "approval.instance.approved",
+        "approval.instance.rejected"
+      ]
+    },
+    "permissions": {
+      "scopes": [
+        "bitable:app",
+        "bitable:table",
+        "approval:instance",
+        "im:message",
+        "contact:user",
+        "contact:department"
+      ]
+    },
+    "home_page": {
+      "type": "web",
+      "url": "https://【你的域名】/",
+      "mobile_url": "https://【你的域名】/"
+    }
+  }
+}

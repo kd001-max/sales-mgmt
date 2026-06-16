@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>销售订货子系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <a href="/" class="back-btn">← 返回</a>
+    <h1>📋 销售订货</h1>
+    <div style="display:flex;align-items:center;gap:6px;font-size:13px;">
+      <span id="userName" style="opacity:0.9;font-size:12px;"></span>
+      <button class="header-action" onclick="openCreateModal()">+ 新建</button>
+    </div>
+  </header>
+
+  <div class="page-content">
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="搜索订单编号、客户名..." id="searchInput" oninput="loadOrders()">
+    </div>
+
+    <div class="filter-bar" id="filterBar">
+      <span class="filter-tag active" data-filter="">全部</span>
+      <span class="filter-tag" data-filter="待提交">待提交</span>
+      <span class="filter-tag" data-filter="工程评审中">工程评审</span>
+      <span class="filter-tag" data-filter="计划评审中">计划评审</span>
+      <span class="filter-tag" data-filter="评审完成">评审完成</span>
+      <span class="filter-tag" data-filter="已审核">已审核</span>
+    </div>
+
+    <div class="steps-indicator">
+      <div class="step-dot active"><div class="dot">1</div><div class="step-line"></div></div>
+      <div class="step-dot"><div class="dot">2</div><div class="step-line"></div></div>
+      <div class="step-dot"><div class="dot">3</div><div class="step-line"></div></div>
+      <div class="step-dot"><div class="dot">4</div><div class="step-line"></div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin:-8px 0 16px;">
+      <span>业务录入</span><span>工程评审</span><span>计划评审</span><span>业务确认</span>
+    </div>
+
+    <div id="orderList" class="card-list">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <nav class="app-tabs">
+    <a href="/"><span class="tab-icon">🏠</span>首页</a>
+    <a href="/sales-order" class="active"><span class="tab-icon">📋</span>订货</a>
+    <a href="/production-plan"><span class="tab-icon">⚙️</span>生产</a>
+    <a href="/material-control"><span class="tab-icon">📦</span>物料</a>
+    <a href="/sales-shipment"><span class="tab-icon">🚚</span>发货</a>
+  </nav>
+
+  <!-- 新建订单弹窗 -->
+  <div class="modal-overlay" id="createModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>新建销售订单</h3>
+        <button class="modal-close" onclick="closeCreateModal()">×</button>
+      </div>
+      <form id="createForm" onsubmit="submitOrder(event)">
+        <div class="form-group">
+          <label>订单编号 *</label>
+          <input type="text" id="orderNo" placeholder="系统自动生成或手动输入" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>客户名称 *</label>
+            <input type="text" id="customer" required>
+          </div>
+          <div class="form-group">
+            <label>销售部门 *</label>
+            <select id="department">
+              <option value="国际业务部">国际业务部</option>
+              <option value="国内市场部">国内市场部</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>订单类型</label>
+            <select id="orderType">
+              <option value="标准订单">标准订单</option>
+              <option value="预测订单">预测订单</option>
+              <option value="急插单">急插单</option>
+              <option value="非标订单">非标订单</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>是否急插单</label>
+            <select id="isRushOrder">
+              <option value="否">否</option>
+              <option value="是">是（需提前7个工作日）</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>订单数量 (PCS) *</label>
+            <input type="number" id="totalQty" required>
+          </div>
+          <div class="form-group">
+            <label>单价 (元) *</label>
+            <input type="number" id="unitPrice" step="0.01" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>交期日期 *</label>
+          <input type="date" id="deliveryDate" required>
+        </div>
+        <div class="form-group">
+          <label>客户订单号</label>
+          <input type="text" id="customerOrderNo" placeholder="客户原始订单号">
+        </div>
+        <div class="form-group">
+          <label>待确认需求</label>
+          <textarea id="pendingConfirmInfo" placeholder="如包装材料待客户确认等"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">创建并提交评审</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 订单操作弹窗 -->
+  <div class="modal-overlay" id="actionModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="actionModalTitle">订单操作</h3>
+        <button class="modal-close" onclick="closeActionModal()">×</button>
+      </div>
+      <div id="actionModalBody"></div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    let currentFilter = '';
+    let currentOrderId = '';
+
+    // 筛选切换
+    document.getElementById('filterBar').addEventListener('click', (e) => {
+      const tag = e.target.closest('.filter-tag');
+      if (!tag) return;
+      document.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      currentFilter = tag.dataset.filter;
+      loadOrders();
+    });
+
+    // 加载订单列表
+    async function loadOrders() {
+      const container = document.getElementById('orderList');
+      container.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const resp = await API.salesOrder.list({ status: currentFilter || undefined });
+        const items = resp.data?.items || [];
+
+        if (items.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">暂无订单数据</div></div>';
+          return;
+        }
+
+        container.innerHTML = items.map(item => {
+          const f = item.fields || {};
+          const id = item.record_id;
+          return `
+            <div class="card-item" onclick="showOrderActions('${id}')">
+              <div class="card-title">${f['订单编号']||'-'} <span class="card-status ${getStatusClass(f['当前节点'])}">${f['当前节点']||'-'}</span></div>
+              <div class="card-meta">
+                <span>🏢 ${f['客户名称']||'-'}</span>
+                <span>📅 ${f['交期日期']||'-'}</span>
+                <span>📦 ${f['订单数量']||0}PCS</span>
+                <span>💰 ¥${f['总金额']||0}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-text">加载失败: ${err.message}</div></div>`;
+      }
+    }
+
+    // 显示订单操作弹窗（根据当前节点显示不同操作）
+    function showOrderActions(recordId) {
+      currentOrderId = recordId;
+      const modal = document.getElementById('actionModal');
+      const title = document.getElementById('actionModalTitle');
+      const body = document.getElementById('actionModalBody');
+
+      title.textContent = '订单操作';
+      body.innerHTML = `
+        <div class="loading">加载订单详情...</div>
+      `;
+      modal.classList.add('show');
+
+      API.salesOrder.get(recordId).then(resp => {
+        const f = resp.data?.fields || {};
+        const node = f['当前节点'] || '待提交';
+
+        let actions = '';
+        switch(node) {
+          case '待提交':
+            actions = `
+              <p style="margin-bottom:12px;"><strong>订单号：</strong>${f['订单编号']||'-'}</p>
+              <p style="margin-bottom:12px;"><strong>客户：</strong>${f['客户名称']||'-'}</p>
+              <div class="btn-group">
+                <button class="btn btn-primary btn-block" onclick="submitToEngineering('${recordId}')">
+                  提交工程评审
+                </button>
+              </div>
+            `;
+            break;
+          case '工程评审中':
+            actions = `
+              <p style="margin-bottom:12px;"><strong>订单：</strong>${f['订单编号']||'-'}</p>
+              <p style="color:var(--warning);">⏳ 等待工程部BOM评审</p>
+              <div class="form-group"><label>BOM用料清单</label>
+                <textarea id="bomInfo" placeholder="输入BOM内容或备注"></textarea>
+              </div>
+              <div class="approval-actions">
+                <button class="btn btn-outline" onclick="engineeringReview('${recordId}', false)">不通过</button>
+                <button class="btn btn-primary" onclick="engineeringReview('${recordId}', true)">评审通过</button>
+              </div>
+            `;
+            break;
+          case '计划评审中':
+            actions = `
+              <p style="margin-bottom:12px;"><strong>订单：</strong>${f['订单编号']||'-'}</p>
+              <p style="color:var(--warning);">⏳ 等待计划部交期评审</p>
+              <div class="form-group"><label>确认交期日期 *</label>
+                <input type="date" id="confirmDate">
+              </div>
+              <div class="approval-actions">
+                <button class="btn btn-outline" onclick="planningReview('${recordId}', false)">不通过</button>
+                <button class="btn btn-primary" onclick="planningReview('${recordId}', true)">评审通过</button>
+              </div>
+            `;
+            break;
+          case '评审完成':
+            actions = `
+              <p style="margin-bottom:12px;"><strong>订单：</strong>${f['订单编号']||'-'}</p>
+              <p style="margin-bottom:12px;"><strong>评审交期：</strong>${f['评审交期']||'-'}</p>
+              <div class="approval-actions">
+                <button class="btn btn-outline" onclick="showChangeModal('${recordId}')">有异议</button>
+                <button class="btn btn-success" onclick="confirmOrder('${recordId}', true)">确认交期</button>
+              </div>
+            `;
+            break;
+          default:
+            actions = `
+              <p><strong>订单：</strong>${f['订单编号']||'-'}</p>
+              <p><strong>当前状态：</strong>${node}</p>
+            `;
+        }
+
+        body.innerHTML = actions;
+      }).catch(err => {
+        body.innerHTML = `<p style="color:var(--danger);">加载失败: ${err.message}</p>`;
+      });
+    }
+
+    function closeActionModal() {
+      document.getElementById('actionModal').classList.remove('show');
+    }
+
+    // 新建订单弹窗
+    function openCreateModal() {
+      document.getElementById('createModal').classList.add('show');
+      document.getElementById('orderNo').value = `SO${Date.now()}`;
+      document.getElementById('deliveryDate').value = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+    }
+    function closeCreateModal() {
+      document.getElementById('createModal').classList.remove('show');
+    }
+
+    // 提交订单
+    async function submitOrder(e) {
+      e.preventDefault();
+      const data = {
+        orderNo: document.getElementById('orderNo').value,
+        customer: document.getElementById('customer').value,
+        department: document.getElementById('department').value,
+        orderType: document.getElementById('orderType').value,
+        isRushOrder: document.getElementById('isRushOrder').value,
+        totalQty: parseInt(document.getElementById('totalQty').value),
+        unitPrice: parseFloat(document.getElementById('unitPrice').value),
+        totalAmount: parseInt(document.getElementById('totalQty').value) * parseFloat(document.getElementById('unitPrice').value),
+        deliveryDate: document.getElementById('deliveryDate').value,
+        customerOrderNo: document.getElementById('customerOrderNo').value,
+        pendingConfirmInfo: document.getElementById('pendingConfirmInfo').value,
+        salesman: currentUser?.name || '未知用户',
+      };
+
+      try {
+        const resp = await API.salesOrder.create(data);
+        // 自动提交评审
+        await API.salesOrder.submitReview({ recordId: resp.data.record_id, currentUserId: 'user' });
+        showToast('订单创建并提交评审成功', 'success');
+        closeCreateModal();
+        loadOrders();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // 工程评审
+    async function engineeringReview(recordId, passed) {
+      try {
+        const bomInfo = document.getElementById('bomInfo')?.value || '';
+        await API.salesOrder.engineeringReview({ recordId, result: passed, bomInfo, reviewer: '工程部' });
+        showToast(passed ? '工程评审通过' : '工程评审不通过', passed ? 'success' : 'error');
+        closeActionModal();
+        loadOrders();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    // 计划评审
+    async function planningReview(recordId, passed) {
+      try {
+        const date = document.getElementById('confirmDate')?.value || '';
+        await API.salesOrder.planningReview({ recordId, result: passed, confirmedDeliveryDate: date, reviewer: '计划部' });
+        showToast(passed ? '交期评审通过' : '交期评审不通过', passed ? 'success' : 'error');
+        closeActionModal();
+        loadOrders();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    // 确认订单
+    async function confirmOrder(recordId, agreed) {
+      if (agreed) {
+        const ok = await showConfirm('确认该订单交期？确认后将进入生产环节。');
+        if (!ok) return;
+      }
+      try {
+        await API.salesOrder.confirm({ recordId, agreed });
+        showToast('订单已确认', 'success');
+        closeActionModal();
+        loadOrders();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    // 订单变更
+    function showChangeModal(recordId) {
+      closeActionModal();
+      showToast('交期有异议，请与计划部经理协调', 'warning');
+    }
+
+    async function initPage() {
+      const user = await initAuth();
+      const nameEl = document.getElementById('userName');
+      if (nameEl && user) nameEl.textContent = user.department ? `${user.name}(${user.department})` : user.name;
+      loadOrders();
+    }
+    initPage();
+  </script>
+</body>

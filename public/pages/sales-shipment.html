@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>销售发货子系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <a href="/" class="back-btn">← 返回</a>
+    <h1>🚚 销售发货</h1>
+    <div style="display:flex;align-items:center;gap:6px;font-size:13px;">
+      <span id="userName" style="opacity:0.9;font-size:12px;"></span>
+      <button class="header-action" onclick="openCreateModal()">+ 新建</button>
+    </div>
+  </header>
+
+  <div class="page-content">
+    <div class="stats-grid" id="shipStats">
+      <div class="stat-card"><div class="stat-value" id="shipTotal">-</div><div class="stat-label">总发货单</div></div>
+      <div class="stat-card stat-warning"><div class="stat-value" id="shipPendingAudit">-</div><div class="stat-label">待审核</div></div>
+      <div class="stat-card stat-success"><div class="stat-value" id="shipShipped">-</div><div class="stat-label">已发货</div></div>
+      <div class="stat-card stat-danger"><div class="stat-value" id="shipPendingOQC">-</div><div class="stat-label">待OQC</div></div>
+    </div>
+
+    <div class="notice-banner">
+      📌 流程：业务制单 → 部门审核 → 财务审批 → 仓库备货 → OQC确认 → 装柜发货
+    </div>
+
+    <div class="filter-bar" id="shipFilterBar">
+      <span class="filter-tag active" data-filter="">全部</span>
+      <span class="filter-tag" data-filter="pending">待审批</span>
+      <span class="filter-tag" data-filter="shipped">已发货</span>
+    </div>
+
+    <div id="shipmentList" class="card-list">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <!-- 新建发货单 -->
+  <div class="modal-overlay" id="createModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>新建销售发货单</h3>
+        <button class="modal-close" onclick="closeCreateModal()">×</button>
+      </div>
+      <form onsubmit="createShipment(event)">
+        <div class="form-group"><label>关联销售订单号</label>
+          <input type="text" id="shipOrderNo" placeholder="订单出货必填">
+        </div>
+        <div class="form-group"><label>客户名称 *</label><input type="text" id="shipCustomer" required></div>
+        <div class="form-group"><label>产品编码 *</label><input type="text" id="shipProduct" required></div>
+        <div class="form-row">
+          <div class="form-group"><label>发货数量 *</label><input type="number" id="shipQty" required></div>
+          <div class="form-group"><label>单价 (元)</label><input type="number" id="shipPrice" step="0.01"></div>
+        </div>
+        <div class="form-group"><label>批号</label>
+          <select id="shipBatch">
+            <option value="销售订单号">销售订单号（订单出货）</option>
+            <option value="YSMIS">YSMIS（库存出货）</option>
+          </select>
+        </div>
+        <div class="form-group"><label>业务员</label><input type="text" id="shipSalesman"></div>
+        <div class="form-group"><label>备注</label><textarea id="shipRemark"></textarea></div>
+        <button type="submit" class="btn btn-primary btn-block">创建发货单</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 发货单操作弹窗 -->
+  <div class="modal-overlay" id="actionModal">
+    <div class="modal-content">
+      <div class="modal-header"><h3 id="actionTitle">发货单操作</h3>
+        <button class="modal-close" onclick="closeActionModal()">×</button>
+      </div>
+      <div id="actionBody"></div>
+    </div>
+  </div>
+
+  <nav class="app-tabs">
+    <a href="/"><span class="tab-icon">🏠</span>首页</a>
+    <a href="/sales-order"><span class="tab-icon">📋</span>订货</a>
+    <a href="/production-plan"><span class="tab-icon">⚙️</span>生产</a>
+    <a href="/material-control"><span class="tab-icon">📦</span>物料</a>
+    <a href="/sales-shipment" class="active"><span class="tab-icon">🚚</span>发货</a>
+  </nav>
+
+  <script src="/js/api.js"></script>
+  <script>
+    let currentShipFilter = '';
+    let currentShipId = '';
+
+    document.getElementById('shipFilterBar').addEventListener('click', (e) => {
+      const tag = e.target.closest('.filter-tag');
+      if (!tag) return;
+      document.querySelectorAll('#shipFilterBar .filter-tag').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      currentShipFilter = tag.dataset.filter;
+      loadShipments();
+    });
+
+    // 加载发货单
+    async function loadShipments() {
+      const container = document.getElementById('shipmentList');
+      container.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const resp = await API.salesShipment.list({ status: currentShipFilter || undefined });
+        const items = resp.data?.items || [];
+
+        // 统计
+        const stats = await API.salesShipment.stats().catch(() => ({ data: {} }));
+        const s = stats.data || {};
+        document.getElementById('shipTotal').textContent = s.total || items.length;
+        document.getElementById('shipPendingAudit').textContent = s.pendingDeptAudit || 0;
+        document.getElementById('shipShipped').textContent = s.shipped || 0;
+        document.getElementById('shipPendingOQC').textContent = s.pendingOQC || 0;
+
+        if (items.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">🚚</div><div class="empty-text">暂无发货单</div></div>';
+          return;
+        }
+
+        container.innerHTML = items.map(item => {
+          const f = item.fields || {};
+          const id = item.record_id;
+          const shipStatus = f['是否已发货'] || '未发货';
+          return `<div class="card-item" onclick="showShipActions('${id}')">
+            <div class="card-title">${f['发货单号']||'-'} <span class="card-status ${getStatusClass(shipStatus)}">${shipStatus}</span></div>
+            <div class="card-meta">
+              <span>🏢 ${f['客户名称']||'-'}</span>
+              <span>📦 ${f['发货数量']||0}PCS</span>
+              <span>💰 ¥${f['总金额']||0}</span>
+              <span>✅ 财务${f['财务审核']||'待审核'}</span>
+            </div>
+          </div>`;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-text">加载失败: ${err.message}</div></div>`;
+      }
+    }
+
+    function openCreateModal() { document.getElementById('createModal').classList.add('show'); }
+    function closeCreateModal() { document.getElementById('createModal').classList.remove('show'); }
+
+    async function createShipment(e) {
+      e.preventDefault();
+      const qty = parseInt(document.getElementById('shipQty').value);
+      const price = parseFloat(document.getElementById('shipPrice').value) || 0;
+      try {
+        await API.salesShipment.create({
+          salesOrderNo: document.getElementById('shipOrderNo').value,
+          customer: document.getElementById('shipCustomer').value,
+          products: document.getElementById('shipProduct').value,
+          qty,
+          unitPrice: price,
+          batchType: document.getElementById('shipBatch').value,
+          salesman: document.getElementById('shipSalesman').value || currentUser?.name || '未知用户',
+          remark: document.getElementById('shipRemark').value,
+        });
+        showToast('发货单已创建', 'success');
+        closeCreateModal();
+        loadShipments();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function closeActionModal() { document.getElementById('actionModal').classList.remove('show'); }
+
+    function showShipActions(recordId) {
+      currentShipId = recordId;
+      const modal = document.getElementById('actionModal');
+      const title = document.getElementById('actionTitle');
+      const body = document.getElementById('actionBody');
+      modal.classList.add('show');
+
+      API.salesShipment.list().then(resp => {
+        const item = resp.data?.items?.find(i => i.record_id === recordId);
+        if (!item) { body.innerHTML = '<p>未找到发货单</p>'; return; }
+        const f = item.fields || {};
+        const deptAudit = f['部门审核'] || '待审核';
+        const financeAudit = f['财务审核'] || '待审核';
+        const oqc = f['OQC确认'] || '待确认';
+        const shipped = f['是否已发货'] || '未发货';
+
+        body.innerHTML = `
+          <p><strong>发货单：</strong>${f['发货单号']||'-'}</p>
+          <p><strong>客户：</strong>${f['客户名称']||'-'}</p>
+          <p><strong>数量：</strong>${f['发货数量']||0}PCS</p>
+          <p><strong>金额：</strong>¥${f['总金额']||0}</p>
+          <hr style="margin:12px 0;border:none;border-top:1px solid var(--border);">
+
+          <div style="margin-bottom:12px;">
+            <p style="font-size:13px;margin-bottom:4px;">📋 部门审核：<span class="card-status ${deptAudit === '已审核' ? 'status-done' : 'status-pending'}">${deptAudit}</span></p>
+            <p style="font-size:13px;margin-bottom:4px;">💰 财务审核：<span class="card-status ${financeAudit === '已审核' ? 'status-done' : 'status-pending'}">${financeAudit}</span></p>
+            <p style="font-size:13px;margin-bottom:4px;">✅ OQC确认：<span class="card-status ${oqc === '已确认' ? 'status-done' : 'status-pending'}">${oqc}</span></p>
+            <p style="font-size:13px;">🚚 发货状态：<span class="card-status ${shipped === '已发货' ? 'status-done' : 'status-pending'}">${shipped}</span></p>
+          </div>
+
+          <div class="steps-indicator">
+            <div class="step-dot ${deptAudit === '已审核' ? 'done' : 'active'}"><div class="dot">1</div><div class="step-line"></div></div>
+            <div class="step-dot ${financeAudit === '已审核' ? 'done' : (deptAudit === '已审核' ? 'active' : '')}"><div class="dot">2</div><div class="step-line"></div></div>
+            <div class="step-dot ${oqc === '已确认' ? 'done' : (financeAudit === '已审核' ? 'active' : '')}"><div class="dot">3</div><div class="step-line"></div></div>
+            <div class="step-dot ${shipped === '已发货' ? 'done' : (oqc === '已确认' ? 'active' : '')}"><div class="dot">4</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary);margin-bottom:12px;">
+            <span>部门审核</span><span>财务审批</span><span>OQC</span><span>发货</span>
+          </div>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid var(--border);">
+          <p style="font-size:13px;font-weight:500;margin-bottom:8px;">操作：</p>
+          <div class="btn-group" style="flex-direction:column;gap:8px;">
+            ${deptAudit === '待审核' ? `<div class="approval-actions">
+              <button class="btn btn-outline" onclick="deptAudit('${recordId}', false)">驳回</button>
+              <button class="btn btn-primary" onclick="deptAudit('${recordId}', true)">部门审核通过</button>
+            </div>` : ''}
+            ${deptAudit === '已审核' && financeAudit === '待审核' ? `<div class="approval-actions">
+              <button class="btn btn-outline" onclick="financeAudit('${recordId}', false)">驳回</button>
+              <button class="btn btn-primary" onclick="financeAudit('${recordId}', true)">财务审批通过</button>
+            </div>` : ''}
+            ${financeAudit === '已审核' && oqc === '待确认' ? `<button class="btn btn-success btn-block" onclick="confirmOQC('${recordId}', true)">✅ OQC确认通过</button>` : ''}
+            ${oqc === '已确认' && shipped === '未发货' ? `<div style="display:flex;gap:8px;">
+              <button class="btn btn-warning btn-block" onclick="prepareShip('${recordId}')">📦 备货确认</button>
+              <button class="btn btn-success btn-block" onclick="showShipConfirm('${recordId}')">🚚 确认发货</button>
+            </div>` : ''}
+          </div>
+        `;
+      }).catch(err => {
+        body.innerHTML = `<p style="color:var(--danger);">${err.message}</p>`;
+      });
+    }
+
+    async function deptAudit(recordId, passed) {
+      try {
+        await API.salesShipment.departmentAudit({ recordId, approved: passed, comment: passed ? '' : '驳回' });
+        showToast(passed ? '部门审核通过' : '已驳回', passed ? 'success' : 'warning');
+        closeActionModal();
+        loadShipments();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function financeAudit(recordId, passed) {
+      try {
+        await API.salesShipment.financeAudit({ recordId, approved: passed });
+        showToast(passed ? '财务审批通过' : '财务驳回', passed ? 'success' : 'warning');
+        closeActionModal();
+        loadShipments();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function confirmOQC(recordId, confirmed) {
+      try {
+        await API.salesShipment.confirmOQC({ recordId, confirmed });
+        showToast('OQC确认完成', 'success');
+        closeActionModal();
+        loadShipments();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function prepareShip(recordId) {
+      try {
+        await API.salesShipment.prepare({ recordId });
+        showToast('已通知仓管员备货', 'success');
+        closeActionModal();
+        loadShipments();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function showShipConfirm(recordId) {
+      const body = document.getElementById('actionBody');
+      body.innerHTML += `
+        <hr style="margin:12px 0;">
+        <div class="form-group"><label>尾数箱数量</label><input type="number" id="tailBoxQty" value="0"></div>
+        <div class="approval-actions">
+          <button class="btn btn-outline" onclick="closeActionModal()">取消</button>
+          <button class="btn btn-success" onclick="confirmShip('${recordId}')">确认发货</button>
+        </div>
+      `;
+    }
+
+    async function confirmShip(recordId) {
+      const tailBox = parseInt(document.getElementById('tailBoxQty')?.value) || 0;
+      try {
+        await API.salesShipment.confirmShip({ recordId, tailBoxQty: tailBox });
+        showToast('发货确认完成！放行条已开具', 'success');
+        closeActionModal();
+        loadShipments();
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function initPage() {
+      const user = await initAuth();
+      const nameEl = document.getElementById('userName');
+      if (nameEl && user) nameEl.textContent = user.department ? `${user.name}(${user.department})` : user.name;
+      loadShipments();
+    }
+    initPage();
+  </script>
+</body>

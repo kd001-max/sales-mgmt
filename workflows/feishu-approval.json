@@ -1,0 +1,194 @@
+{
+  "workflows": [
+    {
+      "id": "sales_order_review_workflow",
+      "name": "销售订单评审流程",
+      "description": "业务部下达销售订单后，依次经过工程部BOM评审 → 计划部交期评审 → 业务部确认交期",
+      "trigger": {
+        "type": "event",
+        "event_type": "record_created",
+        "table": "销售订单",
+        "condition": "当前节点 = '待提交'"
+      },
+      "steps": [
+        {
+          "id": "submit_order",
+          "name": "业务部提交订单",
+          "type": "auto",
+          "action": "update_field",
+          "target_table": "销售订单",
+          "fields": {
+            "当前节点": "工程评审中",
+            "工程评审状态": "待评审"
+          },
+          "next_step": "engineering_review"
+        },
+        {
+          "id": "engineering_review",
+          "name": "工程部BOM评审",
+          "type": "approval",
+          "approval_code": "sales_order_review",
+          "approval_node": "engineering_review",
+          "assignee_role": "工程部",
+          "time_limit": "新产品10款内1天完成，每多1款顺延1天",
+          "on_approve": {
+            "action": "update_field",
+            "fields": {
+              "工程评审状态": "评审通过",
+              "当前节点": "计划评审中"
+            }
+          },
+          "on_reject": {
+            "action": "update_field",
+            "fields": {
+              "工程评审状态": "评审不通过",
+              "当前节点": "待提交"
+            }
+          },
+          "next_step": "planning_review"
+        },
+        {
+          "id": "planning_review",
+          "name": "计划部交期评审",
+          "type": "approval",
+          "approval_code": "sales_order_review",
+          "approval_node": "planning_review",
+          "assignee_role": "计划部",
+          "time_limit": "1个工作日内完成",
+          "on_approve": {
+            "action": "update_field",
+            "fields": {
+              "计划评审状态": "评审通过",
+              "当前节点": "评审完成"
+            }
+          },
+          "on_reject": {
+            "action": "update_field",
+            "fields": {
+              "计划评审状态": "评审不通过",
+              "当前节点": "待提交"
+            }
+          },
+          "next_step": "sales_confirm"
+        },
+        {
+          "id": "sales_confirm",
+          "name": "业务部确认交期",
+          "type": "approval",
+          "approval_code": "sales_order_review",
+          "approval_node": "sales_confirm",
+          "assignee_role": "业务部",
+          "on_approve": {
+            "action": "update_field",
+            "fields": {
+              "当前节点": "已审核"
+            }
+          },
+          "on_reject": {
+            "action": "notify",
+            "message": "交期有异议，请业务部与计划部经理协调"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order_change_workflow",
+      "name": "订单变更流程",
+      "description": "客户或计划部提出订单变更时，发起变更审批并重新评审交期",
+      "trigger": {
+        "type": "event",
+        "event_type": "record_created",
+        "table": "订单变更通知单",
+        "condition": "评审状态 = '待评审'"
+      },
+      "steps": [
+        {
+          "id": "change_planning_review",
+          "name": "计划部重新评审",
+          "type": "approval",
+          "approval_code": "order_change_notice",
+          "assignee_role": "计划部",
+          "on_approve": {
+            "action": "batch_update",
+            "target_tables": [
+              {
+                "table": "订单变更通知单",
+                "fields": { "评审状态": "评审完成" }
+              },
+              {
+                "table": "销售订单",
+                "match_field": "订单编号",
+                "fields": { "当前节点": "评审完成" }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "material_return_flow",
+      "name": "退补料审批流程",
+      "description": "生产退料和补料的多级审批，根据比例自动判断审批层级",
+      "trigger": {
+        "type": "event",
+        "event_type": "record_created",
+        "table": "退补料申请单",
+        "condition": "审批状态 != '已完成'"
+      },
+      "steps": [
+        {
+          "id": "check_ratio",
+          "name": "自动判断审批层级",
+          "type": "condition",
+          "conditions": [
+            {
+              "name": "超10%或A类超5%须总经理审批",
+              "condition": "退/补料比例(%) > 10 OR (物料分类 = 'A类' AND 退/补料比例(%) > 5)",
+              "action": "set_approver", "role": "总经理"
+            },
+            {
+              "name": "超5%或A类须副总审批",
+              "condition": "退/补料比例(%) > 5 OR 物料分类 = 'A类'",
+              "action": "set_approver", "role": "分管副总"
+            },
+            {
+              "name": "补料须物控加签",
+              "condition": "单据类型 = '补料'",
+              "action": "set_approver", "role": "计划部物控"
+            },
+            {
+              "name": "退料超5%须经理批准",
+              "condition": "单据类型 = '退料' AND 退/补料比例(%) > 5",
+              "action": "set_approver", "role": "生产经理"
+            },
+            {
+              "name": "常规退料主管复核即可",
+              "condition": "true",
+              "action": "set_approver", "role": "车间主管"
+            }
+          ]
+        },
+        {
+          "id": "quality_confirm",
+          "name": "品质确认",
+          "type": "approval",
+          "assignment": "单据类型 = '退料'",
+          "assignee_role": "品质IPQC",
+          "on_approve": {
+            "action": "update_field",
+            "target_table": "退补料申请单",
+            "fields": { "品质确认": "已确认" }
+          }
+        },
+        {
+          "id": "complete_return",
+          "name": "流程完成",
+          "type": "auto",
+          "action": "update_field",
+          "target_table": "退补料申请单",
+          "fields": { "审批状态": "已完成" }
+        }
+      ]
+    }
+  ]
+}

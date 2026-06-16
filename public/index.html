@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>销售生产管理系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1 id="pageTitle">🏭 销售生产管理系统</h1>
+    <div id="userBadge" style="display:flex;align-items:center;gap:6px;font-size:13px;">
+      <span id="userName" style="opacity:0.9;"></span>
+      <span id="loginBtn" onclick="goLogin()" style="cursor:pointer;padding:4px 10px;background:rgba(255,255,255,0.15);border-radius:6px;font-size:12px;">登录</span>
+    </div>
+  </header>
+
+  <div class="page-content">
+    <div id="statusBanner" class="notice-banner" style="display:none;">
+      ⚠️ 飞书服务未连接，当前为演示模式 — 请参考README配置
+    </div>
+
+    <div class="stats-grid" id="overviewStats">
+      <div class="stat-card">
+        <div class="stat-value" id="statOrders">-</div>
+        <div class="stat-label">销售订单</div>
+      </div>
+      <div class="stat-card stat-warning">
+        <div class="stat-value" id="statProduction">-</div>
+        <div class="stat-label">生产工单</div>
+      </div>
+      <div class="stat-card stat-success">
+        <div class="stat-value" id="statShipped">-</div>
+        <div class="stat-label">已发货</div>
+      </div>
+      <div class="stat-card stat-danger">
+        <div class="stat-value" id="statLowStock">-</div>
+        <div class="stat-label">低库存预警</div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:12px;font-size:16px;">📂 子系统</h3>
+    <div class="menu-grid">
+      <a href="/sales-order" class="menu-item">
+        <span class="menu-icon">📋</span>
+        <span class="menu-label">销售订货</span>
+      </a>
+      <a href="/production-plan" class="menu-item">
+        <span class="menu-icon">⚙️</span>
+        <span class="menu-label">生产计划</span>
+      </a>
+      <a href="/material-control" class="menu-item">
+        <span class="menu-icon">📦</span>
+        <span class="menu-label">物料管控</span>
+      </a>
+      <a href="/sales-shipment" class="menu-item">
+        <span class="menu-icon">🚚</span>
+        <span class="menu-label">销售发货</span>
+      </a>
+    </div>
+
+    <h3 style="margin:16px 0 12px;font-size:16px;">📌 待办事项</h3>
+    <div id="todoList" class="card-list">
+      <div class="loading">加载中...</div>
+    </div>
+
+    <h3 style="margin:16px 0 12px;font-size:16px;">🔄 业务流程</h3>
+    <div class="workflow-timeline">
+      <div class="workflow-step done">
+        <div class="step-name">📋 销售订单下达</div>
+        <div class="step-desc">业务部接收客户订单 → 系统录入 → 提交评审</div>
+      </div>
+      <div class="workflow-step done">
+        <div class="step-name">🔧 工程部BOM评审</div>
+        <div class="step-desc">确认BOM用料清单（新产品1天/款）</div>
+      </div>
+      <div class="workflow-step done">
+        <div class="step-name">📅 计划部交期评审</div>
+        <div class="step-desc">确认生产完工日期（1个工作日内）</div>
+      </div>
+      <div class="workflow-step active">
+        <div class="step-name">⚙️ 生产工单 & 排程</div>
+        <div class="step-desc">生成MO → 周排程 → 日计划发放</div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-name">📦 物料发放 & 生产</div>
+        <div class="step-desc">发料 → 生产 → 退补料 → 完工入库</div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-name">🚚 销售发货</div>
+        <div class="step-desc">财务审核 → 备货 → OQC → 装柜发货</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="app-tabs">
+    <a href="/" class="active"><span class="tab-icon">🏠</span>首页</a>
+    <a href="/sales-order"><span class="tab-icon">📋</span>订货</a>
+    <a href="/production-plan"><span class="tab-icon">⚙️</span>生产</a>
+    <a href="/material-control"><span class="tab-icon">📦</span>物料</a>
+    <a href="/sales-shipment"><span class="tab-icon">🚚</span>发货</a>
+  </nav>
+
+  <script src="/js/api.js"></script>
+  <script>
+    async function loadDashboard() {
+      try {
+        const configResp = await API.getConfigStatus();
+        document.getElementById('statusBanner').style.display =
+          configResp.all_ready ? 'none' : 'flex';
+
+        const [orderStats, shipStats, stockStats] = await Promise.all([
+          API.salesOrder.stats().catch(() => ({ data: {} })),
+          API.salesShipment.stats().catch(() => ({ data: {} })),
+          API.materialControl.stockStatus().catch(() => ({ data: {} })),
+        ]);
+
+        document.getElementById('statOrders').textContent = orderStats.data?.total || 0;
+        document.getElementById('statProduction').textContent = orderStats.data?.completed || 0;
+        document.getElementById('statShipped').textContent = shipStats.data?.shipped || 0;
+        document.getElementById('statLowStock').textContent = stockStats.data?.lowStockCount || 0;
+
+        loadTodoList();
+      } catch (err) {
+        ['statOrders','statProduction','statShipped','statLowStock'].forEach(id => {
+          document.getElementById(id).textContent = '--';
+        });
+        document.getElementById('todoList').innerHTML =
+          '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">暂无待办事项</div></div>';
+      }
+    }
+
+    async function loadTodoList() {
+      const container = document.getElementById('todoList');
+      try {
+        const orderResp = await API.salesOrder.list({ status: '待提交' });
+        const orders = orderResp.data?.items || [];
+        if (orders.length === 0) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">暂无待办事项</div></div>';
+          return;
+        }
+        container.innerHTML = orders.slice(0, 10).map(o => {
+          const f = o.fields || {};
+          return `<div class="card-item" onclick="location.href='/sales-order'">
+            <div class="card-title">${f['订单编号']||'-'} - ${f['客户名称']||'-'}</div>
+            <div class="card-meta">
+              <span>📅 ${f['交期日期']||'-'}</span>
+              <span class="card-status ${getStatusClass(f['当前节点'])}">${f['当前节点']||'待处理'}</span>
+            </div>
+          </div>`;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">暂无待办事项</div></div>';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async function() {
+      const user = await initAuth();
+      const nameEl = document.getElementById('userName');
+      const loginBtn = document.getElementById('loginBtn');
+      if (user) {
+        nameEl.textContent = user.department ? `${user.name}(${user.department})` : user.name;
+        loginBtn.textContent = '切换';
+      } else {
+        nameEl.textContent = '未登录';
+        loginBtn.textContent = '登录';
+      }
+      loadDashboard();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+/**
+ * 飞书多维表格(Bitable)通用服务
+ * 封装对飞书多维表格的CRUD操作
+ */
+
+const { client, BITABLE_APP_TOKEN } = require('../config/feishu');
+
+class BitableService {
+  constructor() {
+    this.appToken = BITABLE_APP_TOKEN;
+    this.appTableRecord = client.bitable.appTableRecord;
+  }
+
+  /**
+   * 获取所有记录（支持分页）
+   */
+  async listRecords(tableId, params = {}) {
+    try {
+      const resp = await this.appTableRecord.list({
+        path: { app_token: this.appToken, table_id: tableId },
+        query: {
+          page_size: params.pageSize || 500,
+          page_token: params.pageToken || '',
+          field_names: params.fields || [],
+          sort: params.sort || [],
+          filter: params.filter || '',
+        },
+      });
+      return resp.data;
+    } catch (err) {
+      console.error(`Bitable listRecords 错误:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * 根据ID获取单条记录
+   */
+  async getRecord(tableId, recordId) {
+    try {
+      const resp = await this.appTableRecord.get({
+        path: { app_token: this.appToken, table_id: tableId, record_id: recordId },
+      });
+      return resp.data;
+    } catch (err) {
+      console.error(`Bitable getRecord 错误:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * 创建记录
+   */
+  async createRecord(tableId, fields) {
+    try {
+      const resp = await this.appTableRecord.create({
+        path: { app_token: this.appToken, table_id: tableId },
+        data: {
+          fields: this.formatFields(fields),
+        },
+      });
+      return resp.data;
+    } catch (err) {
+      console.error(`Bitable createRecord 错误:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * 批量创建记录
+   */
+  async batchCreateRecords(tableId, records) {
+    try {
+      const resp = await this.appTableRecord.batchCreate({
+        path: { app_token: this.appToken, table_id: tableId },
+        data: {
+          records: records.map(r => ({ fields: this.formatFields(r) })),
+        },
+      });
+      return resp.data;
+    } catch (err) {
+      console.error(`Bitable batchCreateRecords 错误:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * 更新单条记录
+   */
+  async updateRecord(tableId, recordId, fields) {
+    try {
+      const resp = await this.appTableRecord.update({
+        path: { app_token: this.appToken, table_id: tableId, record_id: recordId },
+        data: {
+          fields: this.formatFields(fields),
+        },
+      });
+      return resp.data;
+    } catch (err) {
+      console.error(`Bitable updateRecord 错误:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * 批量更新记录
+   */
+  async batchUpdateRecords(tableId, records) {
+    try {
+      const recordsData = records.map(r => ({
+        record_id: r.record_id,
+        fields: this.formatFields(r.fields),
+      }));
+      const resp = await this.appTableRecord.batchUpdate({
+        path: { app_token: this.appToken, table_id: tableId },
+        data: { records: recordsData },
+      });
+      return resp.data;
+    } catch (err) {
+      console.error(`Bitable batchUpdateRecords 错误:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * 删除记录
+   */
+  async deleteRecord(tableId, recordId) {
+    try {
+      const resp = await this.appTableRecord.delete({
+        path: { app_token: this.appToken, table_id: tableId, record_id: recordId },
+      });
+      return resp.data;
+    } catch (err) {
+      console.error(`Bitable deleteRecord 错误:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * 格式化字段数据（处理数组、日期等类型）
+   */
+  formatFields(fields) {
+    const formatted = {};
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === null || value === undefined) continue;
+      if (value instanceof Date) {
+        formatted[key] = value.getTime();
+      } else if (typeof value === 'object' && !Array.isArray(value)) {
+        formatted[key] = JSON.stringify(value);
+      } else {
+        formatted[key] = value;
+      }
+    }
+    return formatted;
+  }
+}
+
+module.exports = new BitableService();
