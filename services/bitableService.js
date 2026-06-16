@@ -4,6 +4,7 @@
  */
 
 const { client, BITABLE_APP_TOKEN } = require('../config/feishu');
+const { resolveKey } = require('./tableMapper');
 
 class BitableService {
   constructor() {
@@ -12,9 +13,18 @@ class BitableService {
   }
 
   /**
+   * 自动解析表名。若传的是key如'sales_order'，自动转成实际table_id
+   */
+  _tid(key) {
+    if (!key || key.startsWith('tbl')) return key;
+    return resolveKey(key);
+  }
+
+  /**
    * 获取所有记录（支持分页）
    */
-  async listRecords(tableId, params = {}) {
+  async listRecords(tableKey, params = {}) {
+    const tableId = this._tid(tableKey);
     try {
       const resp = await this.appTableRecord.list({
         path: { app_token: this.appToken, table_id: tableId },
@@ -36,7 +46,8 @@ class BitableService {
   /**
    * 根据ID获取单条记录
    */
-  async getRecord(tableId, recordId) {
+  async getRecord(tableKey, recordId) {
+    const tableId = this._tid(tableKey);
     try {
       const resp = await this.appTableRecord.get({
         path: { app_token: this.appToken, table_id: tableId, record_id: recordId },
@@ -51,7 +62,8 @@ class BitableService {
   /**
    * 创建记录
    */
-  async createRecord(tableId, fields) {
+  async createRecord(tableKey, fields) {
+    const tableId = this._tid(tableKey);
     try {
       const resp = await this.appTableRecord.create({
         path: { app_token: this.appToken, table_id: tableId },
@@ -69,7 +81,8 @@ class BitableService {
   /**
    * 批量创建记录
    */
-  async batchCreateRecords(tableId, records) {
+  async batchCreateRecords(tableKey, records) {
+    const tableId = this._tid(tableKey);
     try {
       const resp = await this.appTableRecord.batchCreate({
         path: { app_token: this.appToken, table_id: tableId },
@@ -87,7 +100,8 @@ class BitableService {
   /**
    * 更新单条记录
    */
-  async updateRecord(tableId, recordId, fields) {
+  async updateRecord(tableKey, recordId, fields) {
+    const tableId = this._tid(tableKey);
     try {
       const resp = await this.appTableRecord.update({
         path: { app_token: this.appToken, table_id: tableId, record_id: recordId },
@@ -105,7 +119,8 @@ class BitableService {
   /**
    * 批量更新记录
    */
-  async batchUpdateRecords(tableId, records) {
+  async batchUpdateRecords(tableKey, records) {
+    const tableId = this._tid(tableKey);
     try {
       const recordsData = records.map(r => ({
         record_id: r.record_id,
@@ -125,7 +140,8 @@ class BitableService {
   /**
    * 删除记录
    */
-  async deleteRecord(tableId, recordId) {
+  async deleteRecord(tableKey, recordId) {
+    const tableId = this._tid(tableKey);
     try {
       const resp = await this.appTableRecord.delete({
         path: { app_token: this.appToken, table_id: tableId, record_id: recordId },

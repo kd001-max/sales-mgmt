@@ -6,9 +6,10 @@ const router = express.Router();
 const bitableService = require('../services/bitableService');
 const approvalService = require('../services/approvalService');
 const botService = require('../services/botService');
+const { resolveKey } = require('../services/tableMapper');
 
-// 表ID（按需配置或通过名称自动查找）
-const TABLE_ID = 'sales_order';
+// 表ID
+const TABLE_ID = resolveKey('sales_order');
 
 /**
  * GET /api/sales-order/list

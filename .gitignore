@@ -1,3 +1,5 @@
 node_modules/
 .env
 docs/
+cleanTestTables.js
+bitable/getMapping.js
